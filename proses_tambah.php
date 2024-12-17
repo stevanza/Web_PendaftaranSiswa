@@ -5,51 +5,107 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         // Validasi NISN (10 digit)
         if (!preg_match("/^[0-9]{10}$/", $_POST['nisn'])) {
-            header("Location: index.php?error=nisn_invalid");
-            exit();
+            throw new Exception("NISN harus 10 digit angka");
         }
 
         // Validasi email
         if (!filter_var($_POST['email'], FILTER_VALIDATE_EMAIL)) {
-            header("Location: index.php?error=email_invalid");
-            exit();
+            throw new Exception("Format email tidak valid");
         }
 
-        // Validasi nomor telepon (minimal 10 digit, maksimal 13 digit)
+        // Validasi nomor telepon (10-13 digit)
         if (!preg_match("/^[0-9]{10,13}$/", $_POST['no_telp'])) {
-            header("Location: index.php?error=phone_invalid");
-            exit();
+            throw new Exception("Nomor telepon harus 10-13 digit angka");
         }
 
-        $sql = "INSERT INTO siswa (nisn, nama_lengkap, jenis_kelamin, alamat, no_telp, email) 
-                VALUES (:nisn, :nama_lengkap, :jenis_kelamin, :alamat, :no_telp, :email)";
+        // Tambahkan sebelum proses upload file
+        if (!file_exists('uploads')) {
+            if (!mkdir('uploads', 0777)) {
+                throw new Exception("Gagal membuat direktori uploads");
+            }
+        }
+
+        // Handle foto upload
+        $foto_path = null;
+        if (isset($_FILES['foto']) && $_FILES['foto']['error'] == 0) {
+            $allowed = ['jpg', 'jpeg', 'png'];
+            $filename = $_FILES['foto']['name'];
+            $file_ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+            $filesize = $_FILES['foto']['size'];
+
+            // Validasi ekstensi file
+            if (!in_array($file_ext, $allowed)) {
+                throw new Exception("Format file tidak valid! Gunakan JPG, JPEG, atau PNG.");
+            }
+
+            // Validasi ukuran file (max 2MB)
+            if ($filesize > 2 * 1024 * 1024) {
+                throw new Exception("Ukuran file terlalu besar! Maksimal 2MB.");
+            }
+
+            // Generate unique filename
+            $new_filename = uniqid('IMG_') . '.' . $file_ext;
+            $upload_path = 'uploads/' . $new_filename;
+
+            // Buat direktori uploads jika belum ada
+            if (!file_exists('uploads')) {
+                mkdir('uploads', 0777, true);
+            }
+
+            // Pindahkan file
+            if (!move_uploaded_file($_FILES['foto']['tmp_name'], $upload_path)) {
+                throw new Exception("Gagal mengupload foto");
+            }
+            $foto_path = $new_filename;
+        }
+
+        // Insert data ke database
+        $sql = "INSERT INTO siswa (nisn, nama_lengkap, jenis_kelamin, alamat, no_telp, email, foto) 
+                VALUES (:nisn, :nama_lengkap, :jenis_kelamin, :alamat, :no_telp, :email, :foto)";
         
         $stmt = $pdo->prepare($sql);
         
-        $stmt->bindParam(':nisn', $_POST['nisn']);
-        $stmt->bindParam(':nama_lengkap', $_POST['nama_lengkap']);
-        $stmt->bindParam(':jenis_kelamin', $_POST['jenis_kelamin']);
-        $stmt->bindParam(':alamat', $_POST['alamat']);
-        $stmt->bindParam(':no_telp', $_POST['no_telp']);
-        $stmt->bindParam(':email', $_POST['email']);
+        $stmt->execute([
+            ':nisn' => $_POST['nisn'],
+            ':nama_lengkap' => $_POST['nama_lengkap'],
+            ':jenis_kelamin' => $_POST['jenis_kelamin'],
+            ':alamat' => $_POST['alamat'],
+            ':no_telp' => $_POST['no_telp'],
+            ':email' => $_POST['email'],
+            ':foto' => $foto_path
+        ]);
         
-        $stmt->execute();
-        
-        header("Location: data_siswa.php");
+        header("Location: data_siswa.php?status=success");
         exit();
         
     } catch (PDOException $e) {
+        // Hapus foto yang sudah diupload jika ada error
+        if (isset($foto_path) && file_exists('uploads/' . $foto_path)) {
+            unlink('uploads/' . $foto_path);
+        }
+
         if ($e->errorInfo[1] === 1062) { // Duplicate entry error
             if (strpos($e->getMessage(), 'nisn')) {
-                header("Location: index.php?error=nisn_exists");
-            } else if (strpos($e->getMessage(), 'email')) {
-                header("Location: index.php?error=email_exists");
+                $error = "NISN sudah terdaftar";
+            } elseif (strpos($e->getMessage(), 'email')) {
+                $error = "Email sudah terdaftar";
             } else {
-                header("Location: index.php?error=duplicate_entry");
+                $error = "Data duplikat ditemukan";
             }
-            exit();
+        } else {
+            $error = "Terjadi kesalahan database: " . $e->getMessage();
         }
-        die("Error database: " . $e->getMessage());
+        
+        header("Location: form_siswa.php?error=" . urlencode($error));
+        exit();
+    } catch (Exception $e) {
+        // Hapus foto yang sudah diupload jika ada error
+        if (isset($foto_path) && file_exists('uploads/' . $foto_path)) {
+            unlink('uploads/' . $foto_path);
+        }
+        
+        header("Location: form_siswa.php?error=" . urlencode($e->getMessage()));
+        exit();
     }
 }
 ?>

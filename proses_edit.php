@@ -7,17 +7,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $foto_lama = $_POST['foto_lama'];
         $foto_path = $foto_lama; // Default ke foto yang sudah ada
 
-        // Validasi input dasar
-        if (!preg_match("/^[0-9]{10}$/", $_POST['nisn'])) {
-            throw new Exception("NISN harus 10 digit angka");
-        }
-
-        if (!filter_var($_POST['email'], FILTER_VALIDATE_EMAIL)) {
-            throw new Exception("Format email tidak valid");
-        }
-
-        if (!preg_match("/^[0-9]{10,13}$/", $_POST['no_telp'])) {
-            throw new Exception("Nomor telepon harus 10-13 digit angka");
+        // Tambahkan sebelum proses upload file
+        if (!file_exists('uploads')) {
+            if (!mkdir('uploads', 0777)) {
+                throw new Exception("Gagal membuat direktori uploads");
+            }
         }
 
         // Cek jika ada upload foto baru
@@ -25,7 +19,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $allowed = ['jpg', 'jpeg', 'png'];
             $filename = $_FILES['foto']['name'];
             $file_ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-            $filesize = $_FILES['foto']['size'];
 
             // Validasi ekstensi file
             if (!in_array($file_ext, $allowed)) {
@@ -33,22 +26,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             // Validasi ukuran file (max 2MB)
-            if ($filesize > 2 * 1024 * 1024) {
+            if ($_FILES['foto']['size'] > 2 * 1024 * 1024) {
                 throw new Exception("Ukuran file terlalu besar! Maksimal 2MB.");
             }
 
             // Generate unique filename
-            $new_filename = uniqid('IMG_') . '.' . $file_ext;
+            $new_filename = uniqid() . '.' . $file_ext;
             $upload_path = 'uploads/' . $new_filename;
-
-            // Pastikan direktori uploads ada
-            if (!file_exists('uploads')) {
-                mkdir('uploads', 0777, true);
-            }
 
             // Pindahkan file
             if (move_uploaded_file($_FILES['foto']['tmp_name'], $upload_path)) {
-                // Hapus foto lama jika ada dan berbeda dari default
+                // Hapus foto lama jika ada
                 if ($foto_lama && file_exists('uploads/' . $foto_lama)) {
                     unlink('uploads/' . $foto_lama);
                 }
@@ -85,24 +73,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: data_siswa.php?status=updated");
         exit();
 
-    } catch (PDOException $e) {
-        // Hapus foto baru yang sudah diupload jika ada error
-        if (isset($new_filename) && file_exists('uploads/' . $new_filename)) {
-            unlink('uploads/' . $new_filename);
-        }
-
-        $error = ($e->errorInfo[1] === 1062) 
-            ? "Data sudah ada dalam database" 
-            : "Terjadi kesalahan: " . $e->getMessage();
-
-        header("Location: edit.php?id=$id&error=" . urlencode($error));
-        exit();
     } catch (Exception $e) {
-        // Hapus foto baru yang sudah diupload jika ada error
+        // Jika ada error dan foto baru sudah diupload, hapus foto tersebut
         if (isset($new_filename) && file_exists('uploads/' . $new_filename)) {
             unlink('uploads/' . $new_filename);
         }
-        
         header("Location: edit.php?id=$id&error=" . urlencode($e->getMessage()));
         exit();
     }

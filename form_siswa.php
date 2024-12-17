@@ -15,6 +15,11 @@
             background-color: #f8d7da;
             border: 1px solid #f5c6cb;
         }
+        .preview-image {
+            max-width: 200px;
+            max-height: 200px;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -31,7 +36,7 @@
             <div class="card-body">
                 <div id="errorMessage"></div>
 
-                <form id="formSiswa" action="proses_tambah.php" method="POST" onsubmit="return validateForm()">
+                <form id="formSiswa" action="proses_tambah.php" method="POST" onsubmit="return validateForm()" enctype="multipart/form-data">
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label for="nisn" class="form-label">NISN</label>
@@ -68,8 +73,15 @@
                         <input type="email" class="form-control" id="email" name="email" required>
                     </div>
 
+                    <div class="mb-3">
+                        <label for="foto" class="form-label">Foto Siswa</label>
+                        <input type="file" class="form-control" id="foto" name="foto" accept="image/*" onchange="previewImage(this)">
+                        <small class="text-muted">Format yang diizinkan: JPG, JPEG, PNG. Maksimal 2MB</small>
+                        <div id="imagePreview"></div>
+                    </div>
+
                     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                        <button type="reset" class="btn btn-secondary me-md-2">Reset</button>
+                        <button type="reset" class="btn btn-secondary me-md-2" onclick="clearImagePreview()">Reset</button>
                         <button type="submit" class="btn btn-primary">Simpan</button>
                     </div>
                 </form>
@@ -93,6 +105,7 @@
             const nisn = document.getElementById('nisn').value;
             const email = document.getElementById('email').value;
             const noTelp = document.getElementById('no_telp').value;
+            const foto = document.getElementById('foto').files[0];
             let isValid = true;
 
             // Validasi NISN
@@ -114,11 +127,50 @@
                 isValid = false;
             }
 
+            // Validasi Foto
+            if (foto) {
+                const fileSize = foto.size / 1024 / 1024; // dalam MB
+                const validExtensions = ['jpg', 'jpeg', 'png'];
+                const fileExtension = foto.name.split('.').pop().toLowerCase();
+
+                if (!validExtensions.includes(fileExtension)) {
+                    showError('Format file tidak valid! Gunakan JPG, JPEG, atau PNG.');
+                    isValid = false;
+                }
+
+                if (fileSize > 2) {
+                    showError('Ukuran file terlalu besar! Maksimal 2MB.');
+                    isValid = false;
+                }
+            }
+
             return isValid;
+        }
+
+        function previewImage(input) {
+            const preview = document.getElementById('imagePreview');
+            preview.innerHTML = '';
+
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    img.className = 'preview-image';
+                    preview.appendChild(img);
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function clearImagePreview() {
+            document.getElementById('imagePreview').innerHTML = '';
+            document.getElementById('errorMessage').style.display = 'none';
         }
 
         document.getElementById('formSiswa').addEventListener('reset', function() {
             document.getElementById('errorMessage').style.display = 'none';
+            clearImagePreview();
         });
     </script>
 </body>
